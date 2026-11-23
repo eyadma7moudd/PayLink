@@ -1,0 +1,242 @@
+@startuml PayLink_Domain_Class_Diagram_Simple
+title PayLink - Domain Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 40
+hide empty members
+
+' ============ USERS AND WALLET ============
+abstract class User {
+  - id : UUID
+  - fullName : String
+  - phoneNumber : String
+  - role : Role
+  - status : AccountStatus
+}
+
+class Customer {
+  - verificationLevel : BASIC | VERIFIED
+  + getDailyLimit() : Decimal
+}
+
+class Agent {
+  - terminalId : String
+}
+
+class Wallet {
+  + getAvailableBalance() : Decimal
+  + getHeldBalance() : Decimal
+}
+
+class LedgerEntry <<immutable>> {
+  - reference : String
+  - type : LedgerEntryType
+  - bucket : AVAILABLE | HELD
+  - amount : Decimal
+  - createdAt : DateTime
+}
+
+class Hold {
+  - amount : Decimal
+  - status : ACTIVE | CAPTURED | RELEASED
+  + capture()
+  + release()
+}
+
+' ============ BILLERS ============
+class Biller {
+  - code : String
+  - name : String
+  - type : ELECTRICITY | WATER | MOBILE | INTERNET
+  - active : Boolean
+}
+
+class BillerService {
+  - name : String
+  - minAmount : Decimal
+  - maxAmount : Decimal
+  - requiredFields : List
+}
+
+' ============ PAYMENT ============
+class Payment {
+  - reference : String
+  - billAmount : Decimal
+  - feeAmount : Decimal
+  - totalAmount : Decimal
+  - channel : DIRECT | AGENT
+  - createdAt : DateTime
+  + handle(event : PaymentEvent)
+}
+
+class IdempotencyRecord {
+  - key : String
+  - requestHash : String
+  - expiresAt : DateTime
+}
+
+class PaymentService <<orchestrator>> {
+  + pay(request, idempotencyKey) : Payment
+  + refundFailedPayment(p : Payment)
+}
+
+interface PaymentState <<State>> {
+  + next(event : PaymentEvent) : PaymentState
+}
+
+class InitiatedState
+class FundsHeldState
+class SentToBillerState
+class UnknownState
+class FailedState
+class CompletedState
+class RejectedState
+class RefundedState
+
+' ============ FRAUD CHECKS ============
+interface FraudRule <<Chain of Responsibility>> {
+  + setNext(rule : FraudRule)
+  + check(p : Payment) : FraudResult
+}
+
+class AccountBlockedRule
+class DailyLimitRule
+class VelocityRule
+
+' ============ BILLER INTEGRATION ============
+interface BillerAdapter <<Adapter>> {
+  + inquire(request) : BillInquiryResult
+  + pay(request) : BillerResponse
+  + queryStatus(reference) : BillerResponse
+}
+
+class ElectroCoAdapter
+class AquaCoAdapter
+class TopUpNetAdapter
+
+class BillerAdapterFactory <<Factory>> {
+  + getAdapter(billerCode : String) : BillerAdapter
+}
+
+' ============ FEES AND COMMISSIONS ============
+interface FeeStrategy <<Strategy>> {
+  + calculate(amount : Decimal) : Decimal
+}
+
+class FixedFee
+class PercentageFee
+class TieredFee
+
+class Promotion {
+  - startDate : Date
+  - endDate : Date
+}
+
+class Commission {
+  - amount : Decimal
+  - creditedAt : DateTime
+}
+
+' ============ NOTIFICATIONS ============
+interface PaymentObserver <<Observer>> {
+  + onPaymentChanged(p : Payment)
+}
+
+class NotificationService
+
+class Notification {
+  - channel : SMS | EMAIL | PUSH
+  - status : PENDING | SENT | UNDELIVERED
+  - attempts : Integer
+}
+
+' ============ RECONCILIATION AND AUDIT ============
+class SettlementFile {
+  - fileDate : Date
+}
+
+class ReconciliationReport {
+  - runDate : Date
+  - differences : List
+}
+
+class AuditLog {
+  - action : String
+  - reason : String
+  - createdAt : DateTime
+}
+
+' ============ RELATIONSHIPS ============
+User <|-- Customer
+User <|-- Agent
+User "1" -- "1" Wallet : owns >
+Wallet "1" *-- "0..*" LedgerEntry
+Wallet "1" *-- "0..*" Hold
+
+Biller "1" *-- "1..*" BillerService
+Biller "1" -- "0..*" Promotion
+
+Customer "1" -- "0..*" Payment : makes >
+Agent "0..1" -- "0..*" Payment : initiates >
+Payment "0..*" --> "1" BillerService : pays for >
+Payment "1" -- "0..1" Hold : reserves >
+Payment "1" -- "0..*" LedgerEntry : produces >
+Payment "1" -- "1" IdempotencyRecord : protected by >
+Payment "1" -- "0..1" Commission : earns >
+Commission "0..*" --> "1" Agent : credited to >
+
+Payment o-- "1" PaymentState : current state
+PaymentState <|.. InitiatedState
+PaymentState <|.. FundsHeldState
+PaymentState <|.. SentToBillerState
+PaymentState <|.. UnknownState
+PaymentState <|.. FailedState
+PaymentState <|.. CompletedState
+PaymentState <|.. RejectedState
+PaymentState <|.. RefundedState
+
+PaymentService ..> Payment
+PaymentService ..> FraudRule
+PaymentService ..> BillerAdapterFactory
+PaymentService ..> FeeStrategy
+
+FraudRule <|.. AccountBlockedRule
+FraudRule <|.. DailyLimitRule
+FraudRule <|.. VelocityRule
+
+BillerAdapter <|.. ElectroCoAdapter
+BillerAdapter <|.. AquaCoAdapter
+BillerAdapter <|.. TopUpNetAdapter
+BillerAdapterFactory ..> BillerAdapter : creates
+
+FeeStrategy <|.. FixedFee
+FeeStrategy <|.. PercentageFee
+FeeStrategy <|.. TieredFee
+
+PaymentObserver <|.. NotificationService
+NotificationService ..> Notification : creates
+User "1" -- "0..*" Notification : receives >
+Payment "1" -- "0..*" Notification : triggers >
+
+Biller "1" -- "0..*" SettlementFile : sends >
+ReconciliationReport "0..*" --> "1" SettlementFile : based on >
+ReconciliationReport "0..*" ..> Payment : compares
+AuditLog "0..*" --> "1" User : performed by >
+
+note bottom of PaymentState
+  Allowed transitions only:
+  Initiated -> FundsHeld | Rejected
+  FundsHeld -> SentToBiller
+  SentToBiller -> Completed | Failed | Unknown
+  Unknown -> Completed | Failed
+  Failed -> Refunded
+end note
+
+note right of Wallet
+  No stored balance.
+  Balances are computed
+  from ledger entries.
+end note
+
+@enduml
