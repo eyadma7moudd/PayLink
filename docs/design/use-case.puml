@@ -1,0 +1,119 @@
+@startuml PayLinkUseCase
+
+left to right direction
+
+skinparam backgroundColor white
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam linetype ortho
+skinparam actorStyle awesome
+skinparam usecase {
+    BackgroundColor #EAF2F8
+    BorderColor #2874A6
+    ArrowColor #34495E
+}
+skinparam package {
+    BorderColor #7F8C8D
+    BackgroundColor #FDFEFE
+}
+
+actor Customer
+actor Agent
+actor Admin
+actor "Support Employee" as Support
+actor Biller
+
+rectangle "PayLink System" {
+
+    package "Customer Services" {
+        usecase "Register Account" as UC1
+        usecase "Upgrade to Verified Account" as UC2
+        usecase "View Wallet Balance" as UC3
+        usecase "View Transaction History" as UC4
+        usecase "Top Up Wallet" as UC5
+        usecase "View Billers and Services" as UC6
+        usecase "Inquire About Bill" as UC7
+        usecase "Pay Bill" as UC8
+        usecase "Receive Payment Notifications" as UC9
+        usecase "Request Refund" as UC10
+    }
+
+    package "Agent Services" {
+        usecase "Pay Bill on Behalf\nof Customer" as UC11
+    }
+
+    package "Administration" {
+        usecase "Manage Billers\nand Services" as UC12
+        usecase "Edit Fees and Limits" as UC13
+        usecase "View Daily Totals" as UC14
+    }
+
+    package "Support Services" {
+        usecase "Search Payment\nby Reference" as UC15
+        usecase "View Full Payment History" as UC16
+        usecase "Block Account" as UC17
+        usecase "Unblock Account" as UC18
+        usecase "Approve Refund Request" as UC19
+        usecase "Review Reconciliation Report" as UC20
+    }
+
+    package "Payment Processing and Integration" {
+        usecase "Calculate Service Fee" as UC21
+        usecase "Check Payment Limits" as UC22
+        usecase "Reserve Wallet Funds" as UC23
+        usecase "Provide Bill Information" as UC24
+        usecase "Receive Payment Request" as UC25
+        usecase "Send Payment Result / Callback" as UC26
+        usecase "Provide Settlement File" as UC27
+    }
+}
+
+' Customer interactions
+Customer -- UC1
+Customer -- UC2
+Customer -- UC3
+Customer -- UC4
+Customer -- UC5
+Customer -- UC6
+Customer -- UC7
+Customer -- UC8
+Customer -- UC9
+Customer -- UC10
+
+' Agent interactions
+Agent -- UC11
+
+' Admin interactions
+Admin -- UC12
+Admin -- UC13
+Admin -- UC14
+
+' Support interactions
+Support -- UC15
+Support -- UC16
+Support -- UC17
+Support -- UC18
+Support -- UC19
+Support -- UC20
+
+' Biller interactions
+Biller -- UC24
+Biller -- UC25
+Biller -- UC26
+Biller -- UC27
+
+' Use case relationships
+UC8 ..> UC21 : <<include>>
+UC8 ..> UC22 : <<include>>
+UC8 ..> UC23 : <<include>>
+
+UC11 ..> UC8 : <<include>>
+
+UC7 ..> UC24 : <<include>>
+UC8 ..> UC25 : <<include>>
+
+UC19 ..> UC10 : <<extend>>
+
+UC20 ..> UC27 : <<include>>
+
+@enduml
