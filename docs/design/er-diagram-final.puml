@@ -1,0 +1,386 @@
+@startuml PayLink_ER_Diagram
+title PayLink - ER Diagram (PostgreSQL)
+
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 40
+hide circles
+hide methods
+
+' =====================================================================
+' USERS, VERIFICATION, WALLET
+' =====================================================================
+entity users {
+  * id : UUID <<PK>>
+  --
+  * full_name : VARCHAR(100)
+  * phone_number : VARCHAR(20) <<UNIQUE>>
+  * email : VARCHAR(100)
+  * password_hash : VARCHAR(255)
+  * role : VARCHAR(20)
+  * status : VARCHAR(20)
+  verification_level : VARCHAR(10)
+  terminal_id : VARCHAR(50)
+  device_token : VARCHAR(255)
+  blocked_until : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity otp_codes {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * code_hash : VARCHAR(255)
+  * attempts : INT
+  * expires_at : TIMESTAMP
+  * verified : BOOLEAN
+}
+
+entity verification_requests {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  reviewed_by : UUID <<FK>>
+  * identity_type : VARCHAR(30)
+  * identity_number : VARCHAR(50)
+  * status : VARCHAR(10)
+  * submitted_at : TIMESTAMP
+  reviewed_at : TIMESTAMP
+}
+
+entity wallets {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK, UNIQUE>>
+  * currency : CHAR(3)
+}
+
+entity top_ups {
+  * id : UUID <<PK>>
+  --
+  * wallet_id : UUID <<FK>>
+  agent_id : UUID <<FK>>
+  * method : VARCHAR(20)
+  * amount : DECIMAL(12,2)
+  * status : VARCHAR(10)
+  * created_at : TIMESTAMP
+}
+
+entity ledger_entries {
+  * id : UUID <<PK>>
+  --
+  * wallet_id : UUID <<FK>>
+  payment_id : UUID <<FK>>
+  hold_id : UUID <<FK>>
+  top_up_id : UUID <<FK>>
+  * reference : VARCHAR(50)
+  * entry_type : VARCHAR(20)
+  * bucket : VARCHAR(10)
+  * amount : DECIMAL(12,2)
+  * created_at : TIMESTAMP
+}
+
+entity holds {
+  * id : UUID <<PK>>
+  --
+  * wallet_id : UUID <<FK>>
+  * payment_id : UUID <<FK, UNIQUE>>
+  * amount : DECIMAL(12,2)
+  * status : VARCHAR(10)
+  * created_at : TIMESTAMP
+  closed_at : TIMESTAMP
+}
+
+' =====================================================================
+' BILLERS AND FEES
+' =====================================================================
+entity billers {
+  * id : UUID <<PK>>
+  --
+  * code : VARCHAR(30) <<UNIQUE>>
+  * name : VARCHAR(100)
+  * type : VARCHAR(20)
+  * active : BOOLEAN
+}
+
+entity biller_services {
+  * id : UUID <<PK>>
+  --
+  * biller_id : UUID <<FK>>
+  * name : VARCHAR(100)
+  * min_amount : DECIMAL(12,2)
+  * max_amount : DECIMAL(12,2)
+  * required_fields : JSONB
+  * active : BOOLEAN
+}
+
+entity fee_rules {
+  * id : UUID <<PK>>
+  --
+  * biller_id : UUID <<FK, UNIQUE>>
+  * strategy_type : VARCHAR(20)
+  * parameters : JSONB
+  * updated_at : TIMESTAMP
+}
+
+entity promotions {
+  * id : UUID <<PK>>
+  --
+  * biller_id : UUID <<FK>>
+  * start_date : DATE
+  * end_date : DATE
+}
+
+' =====================================================================
+' PAYMENTS
+' =====================================================================
+entity bill_inquiries {
+  * id : UUID <<PK>>
+  --
+  * customer_id : UUID <<FK>>
+  * biller_service_id : UUID <<FK>>
+  * input_values : JSONB
+  * bill_amount : DECIMAL(12,2)
+  * fee_amount : DECIMAL(12,2)
+  * total_amount : DECIMAL(12,2)
+  * created_at : TIMESTAMP
+  * expires_at : TIMESTAMP
+}
+
+entity payments {
+  * id : UUID <<PK>>
+  --
+  * reference : VARCHAR(50) <<UNIQUE>>
+  * customer_id : UUID <<FK>>
+  agent_id : UUID <<FK>>
+  * biller_service_id : UUID <<FK>>
+  inquiry_id : UUID <<FK>>
+  * bill_amount : DECIMAL(12,2)
+  * fee_amount : DECIMAL(12,2)
+  * total_amount : DECIMAL(12,2)
+  * channel : VARCHAR(10)
+  * state : VARCHAR(20)
+  rejection_reason : VARCHAR(255)
+  biller_reference : VARCHAR(100)
+  * retry_count : INT
+  next_retry_at : TIMESTAMP
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+}
+
+entity payment_state_history {
+  * id : UUID <<PK>>
+  --
+  * payment_id : UUID <<FK>>
+  from_state : VARCHAR(20)
+  * to_state : VARCHAR(20)
+  * event : VARCHAR(40)
+  * changed_at : TIMESTAMP
+}
+
+entity idempotency_keys {
+  * id : UUID <<PK>>
+  --
+  * customer_id : UUID <<FK>>
+  * payment_id : UUID <<FK, UNIQUE>>
+  * idem_key : VARCHAR(100)
+  * request_hash : VARCHAR(64)
+  * expires_at : TIMESTAMP
+}
+
+entity callback_logs {
+  * id : UUID <<PK>>
+  --
+  payment_id : UUID <<FK>>
+  * reference : VARCHAR(50)
+  * payload : JSONB
+  * is_duplicate : BOOLEAN
+  * received_at : TIMESTAMP
+}
+
+entity commissions {
+  * id : UUID <<PK>>
+  --
+  * payment_id : UUID <<FK, UNIQUE>>
+  * agent_id : UUID <<FK>>
+  * amount : DECIMAL(12,2)
+  * credited_at : TIMESTAMP
+}
+
+entity refund_requests {
+  * id : UUID <<PK>>
+  --
+  * payment_id : UUID <<FK>>
+  * customer_id : UUID <<FK>>
+  decided_by : UUID <<FK>>
+  * reason : VARCHAR(255)
+  * status : VARCHAR(10)
+  * requested_at : TIMESTAMP
+  decided_at : TIMESTAMP
+}
+
+' =====================================================================
+' NOTIFICATIONS
+' =====================================================================
+entity message_templates {
+  * id : UUID <<PK>>
+  --
+  * code : VARCHAR(50)
+  * channel : VARCHAR(10)
+  * body : TEXT
+}
+
+entity notifications {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  payment_id : UUID <<FK>>
+  * template_id : UUID <<FK>>
+  * channel : VARCHAR(10)
+  * status : VARCHAR(15)
+  * attempts : INT
+  * created_at : TIMESTAMP
+  last_attempt_at : TIMESTAMP
+}
+
+' =====================================================================
+' RECONCILIATION, AUDIT, CONFIG
+' =====================================================================
+entity settlement_files {
+  * id : UUID <<PK>>
+  --
+  * biller_id : UUID <<FK>>
+  * file_date : DATE
+  * file_name : VARCHAR(255)
+}
+
+entity settlement_records {
+  * id : UUID <<PK>>
+  --
+  * settlement_file_id : UUID <<FK>>
+  * biller_reference : VARCHAR(100)
+  * amount : DECIMAL(12,2)
+  * status : VARCHAR(20)
+}
+
+entity reconciliation_reports {
+  * id : UUID <<PK>>
+  --
+  * settlement_file_id : UUID <<FK, UNIQUE>>
+  * run_date : DATE
+}
+
+entity reconciliation_differences {
+  * id : UUID <<PK>>
+  --
+  * report_id : UUID <<FK>>
+  payment_id : UUID <<FK>>
+  settlement_record_id : UUID <<FK>>
+  * type : VARCHAR(30)
+  note : VARCHAR(255)
+  * reviewed : BOOLEAN
+}
+
+entity audit_log {
+  * id : UUID <<PK>>
+  --
+  * actor_id : UUID <<FK>>
+  * action : VARCHAR(50)
+  * entity_type : VARCHAR(30)
+  * entity_id : UUID
+  * reason : VARCHAR(255)
+  * created_at : TIMESTAMP
+}
+
+entity config_settings {
+  * setting_key : VARCHAR(50) <<PK>>
+  --
+  * setting_value : VARCHAR(100)
+  updated_by : UUID <<FK>>
+  * updated_at : TIMESTAMP
+}
+
+' =====================================================================
+' RELATIONSHIPS
+' =====================================================================
+
+' --- users and wallet ---
+users ||--o| wallets : owns
+users ||--o{ otp_codes : receives
+users ||--o{ verification_requests : submits
+users |o--o{ verification_requests : "reviews (admin)"
+wallets ||--o{ top_ups : receives
+users |o--o{ top_ups : "cash top-up (agent)"
+wallets ||--o{ ledger_entries : has
+wallets ||--o{ holds : reserves
+top_ups |o--o{ ledger_entries : produces
+holds |o--o{ ledger_entries : produces
+
+' --- billers ---
+billers ||--|{ biller_services : offers
+billers ||--|| fee_rules : "priced by"
+billers ||--o{ promotions : "promoted by"
+
+' --- payments ---
+users ||--o{ bill_inquiries : requests
+biller_services ||--o{ bill_inquiries : "inquired on"
+users ||--o{ payments : "makes (customer)"
+users |o--o{ payments : "initiates (agent)"
+biller_services ||--o{ payments : "paid for"
+bill_inquiries |o--o| payments : "basis of"
+payments ||--|{ payment_state_history : tracked
+payments ||--o| holds : reserves
+payments |o--o{ ledger_entries : produces
+users ||--o{ idempotency_keys : owns
+payments ||--|| idempotency_keys : "protected by"
+payments |o--o{ callback_logs : receives
+payments ||--o| commissions : earns
+users ||--o{ commissions : "credited to (agent)"
+payments ||--o{ refund_requests : "refund of"
+users ||--o{ refund_requests : requests
+users |o--o{ refund_requests : "decides (support)"
+
+' --- notifications ---
+message_templates ||--o{ notifications : formats
+users ||--o{ notifications : receives
+payments |o--o{ notifications : triggers
+
+' --- reconciliation, audit, config ---
+billers ||--o{ settlement_files : sends
+settlement_files ||--|{ settlement_records : lists
+settlement_files ||--o| reconciliation_reports : "compared in"
+reconciliation_reports ||--o{ reconciliation_differences : flags
+payments |o--o{ reconciliation_differences : concerns
+settlement_records |o--o{ reconciliation_differences : concerns
+users ||--o{ audit_log : performs
+users |o--o{ config_settings : "updated by (admin)"
+
+' =====================================================================
+' NOTES
+' =====================================================================
+note right of ledger_entries
+  No balance column anywhere.
+  Available balance = sum of AVAILABLE rows.
+  Held balance = sum of HELD rows.
+  Rows are append-only (no update or delete).
+  Unique (wallet_id, reference, entry_type, bucket).
+end note
+
+note right of idempotency_keys
+  Unique (customer_id, idem_key).
+  Same key with a different request_hash = conflict.
+  Valid for 24 hours.
+end note
+
+note right of payments
+  state: Initiated, FundsHeld, SentToBiller, Unknown,
+  Completed, Rejected, Failed, Refunded.
+end note
+
+note right of users
+  role: CUSTOMER, AGENT, ADMIN, SUPPORT, SYSTEM.
+  The SYSTEM user owns PayLink's fee-income wallet.
+  All money columns are DECIMAL(12,2), never float.
+end note
+
+@enduml
