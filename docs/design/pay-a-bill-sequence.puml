@@ -1,0 +1,42 @@
+@startuml Pay_A_Bill_Sequence
+actor Customer
+participant "PayLink API" as API
+participant "Fraud Checks" as Fraud
+participant "Fee Calculator" as Fees
+participant Wallet
+participant "Payment Processing" as Payment
+participant "Biller Integration" as Adapter
+participant "External Biller" as Biller
+participant Notifications as Notify
+
+Customer -> API: Confirm bill payment
+API -> Fraud: Validate account and velocity
+Fraud --> API: Pass / Reject
+alt Rejected
+    API --> Customer: Rejection reason
+else Passed
+    API -> Fees: Calculate fee and total
+    Fees --> API: Fee and total
+    API -> Wallet: Hold funds
+    Wallet --> API: Hold confirmed
+    API -> Payment: Create payment (Initiated)
+    Payment -> Adapter: Submit bill payment
+    Adapter -> Biller: Request payment
+    alt Biller confirms
+        Biller --> Adapter: Success
+        Adapter --> Payment: Completed result
+        Payment -> Wallet: Finalize held funds
+        Payment -> Notify: Send success SMS and push
+        Notify --> Customer: Payment completed
+    else Biller declines
+        Biller --> Adapter: Failure
+        Adapter --> Payment: Failed result
+        Payment -> Wallet: Release held funds
+        Payment -> Notify: Send failure SMS and push
+        Notify --> Customer: Payment failed
+    else Timeout
+        Adapter --> Payment: Timeout / Unknown
+        Payment -> Payment: Keep Unknown; retry status query
+    end
+end
+@enduml
