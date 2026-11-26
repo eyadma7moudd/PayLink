@@ -1,0 +1,18 @@
+@startuml Refund_A_Failed_Payment_Sequence
+participant "Payment Processing" as Payment
+participant "Biller Integration / Biller" as Biller
+participant Wallet
+participant Ledger
+participant "Audit Log" as Audit
+participant Notifications as Notify
+actor Customer
+
+Payment -> Biller: Query/receive failed payment result
+Biller --> Payment: Confirm failure
+Payment -> Wallet: Release held amount
+Wallet -> Ledger: Record fund release
+Ledger --> Wallet: Release recorded
+Payment -> Audit: Record failure and refund/release event
+Payment -> Notify: Send failure notification
+Notify --> Customer: Payment failed; funds released
+@enduml
